@@ -6,8 +6,29 @@
 #include <string>
 
 #include "SDL.h"
+#include "SDL_ttf.h"
+
+#include "outside.h"
 
 #include "app.h"
+
+std::string const App::tiles_[] = {
+    "barn",
+    "barn_back",
+    "booth",
+    "dirt",
+    "fence_h_16",
+    "fence_h_24",
+    "fence_v_16",
+    "fence_v_24",
+    "flower",
+    "fountain",
+    "grass",
+    "stump",
+    "timber",
+    "tree",
+    "water",
+};
 
 // 函數 (方法) 的實作 (implementations)
 
@@ -20,13 +41,9 @@
  *  @since  0.1.0
  **/
 App::App(const std::string& name):
-    page_x_{ 0 }, page_x_max_{ 0 },
-    page_y_{ 0 }, page_y_max_{ 0 },
     renderer_{ nullptr }, surface_{ nullptr}, window_{ nullptr },
-    sprite_world_{ nullptr },
+    outside_{ nullptr },
     end_{ false }, invoked_{ name } {
-    int width;
-    int height;
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) { // initialize SDL
         SDL_LogCritical(                // Video subsystem.
@@ -58,19 +75,7 @@ App::App(const std::string& name):
         );
     }
 
-    sprite_world_ = new SpriteSheet(
-        renderer_, "../resources/png/overworld.png"
-    );
-
-    sprite_world_->dimension(width, height);
-
-    page_x_max_ = (width + (64 * 6) -1) / (64 * 6);
-    page_y_max_ = (height + (64 * 4) - 1) / (64 * 4);
-
-    text_ = new Text("../resources/font/jason_writing_1.ttf");
-
-    table_["left_click"] = &App::on_left_click_;
-    table_["right_click"] = &App::on_right_click_;
+    outside_ = new Outside(renderer_);
 } // App::App()
 
 /**
@@ -81,8 +86,7 @@ App::App(const std::string& name):
  *  @since  0.1.0
  **/
 App::~App() {
-    delete sprite_world_;
-    delete text_;
+    delete outside_;
 
     SDL_DestroyWindow(window_);
 
@@ -102,32 +106,6 @@ App::~App() {
 void App::add_listener(const std::string& event, Listener *listener) {
     listener_[event] = listener;
 } // App::add_listener
-
-/**
- *  Render the 'Hello'... messages to the screen.
- *
- *  @param none.
- *  @return none.
- *  @since  0.1.0
- **/
-void App::hello() {
-    Text text_ = Text("../resources/font/jason_writing_1.ttf");
-    SDL_Texture *hello = text_.get_text(renderer_, "zo4j4");
-
-    SDL_Rect rect;
-    rect.x = (800 - 512) / 2;
-    rect.y = (640 - 128) / 3;
-    rect.w = 512;
-    rect.h = 128;
-
-	SDL_Rect a;
-	a.x = (1213 - 318) / 2;
-	a.y = (900318 - 429) / 3;
-	a.w = 318;
-	a.h = 429;
-
-    SDL_RenderCopy(renderer_, hello, &a, &rect);
-} // App::hello()
 
 /**
  *  Invoke registered event handling function for passed_in event.
@@ -269,16 +247,107 @@ void App::get_mouse_(SDL_Event& e) {
     }
 } // App::get_mouse_()
 
+void App::layout_land_(int width, int height) {
+    for (int x = 0; x < width * 32; x += 32) {
+        for (int y = 0; y < height * 32;  y += 32) {
+            SDL_Rect dst = { x, y, 0, 0 };
+
+            outside_->tile("dirt", renderer_, &dst);
+        }
+    }
+} // layout_land_()
+
 /**
- *  Use the whole spritesheet as background.
- *
- *  @param none.
+ *  Put objects on scene map.
  *  @return none.
  *  @since  0.1.0
  */
-void App::layout_background_() {
-    sprite_world_->tile(renderer_, nullptr, nullptr);
-} // App::layout_background_()
+void App::layout_objects_(int off_x, int off_y, int (&objects)[12][12]) {
+    for (int x = 0; x < 12; x ++) {
+        for (int y = 0; y < 12;  y ++) {
+            int tile = objects[y][x];
+
+            if (tile >= 0) {
+                SDL_Rect dst = { x * 32 + off_x, y * 32 + off_y, 0, 0 };
+
+                outside_->tile(App::tiles_[tile], renderer_, &dst);
+            }
+        }
+    }
+} // layout_objects()
+
+/**
+ *  Use the whole spritesheet as background.
+ *  @return none.
+ *  @since  0.1.0
+ */
+void App::layout_map_() {
+    int forest_ld[12][12] = {
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 6, },
+      { 10, -1, -1, 13, 13, -1, -1, 13, -1, -1, 13, 13, },
+      { 13, 13, -1, -1, 13, 13, 13, 13, -1, 13, 13, -1, },
+      { 13, 13, 13, -1, 13, 13, 13, -1, -1, -1, 13, -1, },
+      { 13, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, },
+      { 13, 11, 13, 11, 13, 13, 13, 13, 13, 13, -1, -1, },
+      { 13, 11, 13, 11, 13, 13, 13, 13, 13, 13, -1, -1, },
+      { 11, 13, 13, 11, 11, 11, 13, 13, 13, -1, -1, 13, },
+      { 11, 13, 13, 11, 13, 13, 13, 13, -1, -1, 13, 13, },
+    };
+
+    int forest_lu[12][12] = {
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, }, 
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, }, 
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,  6, 10, },
+      { 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, -1, 6, },
+    };
+
+    int forest_rd[12][12] = {
+      { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, },
+      { 10, 10, 10, 10, 13, 13, 13, 13, 10, 10, 13, 13, },
+      { 10, 10, 10, 10, 13, 13, 13, 13, 10, 13, 13, 13, },
+      { 10, 10, 10, 10, 13, 13, 13, 13, 10, 13, 10, 13, },
+      { 10, 10, 10, 10, 13, 13, 10, 10, 10, 10, 13, 13, },
+      { 10, 10, 10, 13, 13, 13, 10, 10, 13, 10, 13, 13, },
+      { 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, },
+      { 10, 10, 10, 13, 13,  13, 13, 13, -1, 13, 13, 13, },
+      { 13, 13, 6,  6,  6,   6, 6, 13, -1, 13, 13, 13, },
+      { 13, 13, 6,  0,  -1,  -1, 6, 11, 11, -1, 13, 13, },
+      { 10, 10, 10, -1, -1,  -1, 6, 11, 11, 13, 13, -1, },
+      { 13, 13, 13, -1, -1,  -1, 6, 13, 13, 13, -1, -1, },
+    };
+
+    int objects[12][12] = {
+      { 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, },
+      { -1 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, },
+      { -1, -1,  5,  5,  5,  5,  5, -1, -1, -1, -1, -1, },
+      { 10, 10,  5, 10, 10, 10,  5, 10, 10, 10, 10, 10, },
+      { 10, 10,  5, 10, 10, 10,  5, 10, 10, 10, 10, 10, },
+      { -1, -1,  5,  5,  5,  5,  5, -1, -1, -1, -1, -1, },
+      { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, },
+      { 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, },
+      { 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, },
+      { 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, },
+      { 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, },
+      { 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, },
+    };
+
+    layout_land_(25, 20);
+    layout_objects_(0, 0, forest_lu);
+    layout_objects_(0, 8 * 32, forest_ld);
+    layout_objects_(13 * 32, 8 * 32, forest_rd);
+    layout_objects_(13 * 32, 2 * 32, objects);
+} // App::layout_map_()
 
 /**
  *  The main-loop of the game.  Game over when the loop ends.
@@ -291,9 +360,7 @@ void App::loop_() {
     while (!end_) {  // 程式主迴圈 (main-loop)
         SDL_RenderClear(renderer_);     // 清除畫面
 
-        layout_background_();           // 繪製背景
-        hello();        // 印出訊息
-//        tile_page_();
+        layout_map_();                  // 繪製地圖
 
         SDL_RenderPresent(renderer_);   // 呈現畫面
 
@@ -303,112 +370,5 @@ void App::loop_() {
         dispatch_();    // 處理 Event queue 裡的事件
     } // od
 } // App::loop_()
-
-/**
- *  Flip pages horizotally. The sprite_sheet might not fit in one
- *  screen. Mouse's `left-click` is used to flip pages horizontally
- *  while `right-click` flip vertically.
- *
- *  @param std::shared_ptr<Event>: pointer to the 'left-click' event
- *                                 object.
- *  @return int: o: success.
- *  @since  0.1.0
- **/
-int App::on_left_click_(std::shared_ptr<Event> e) {
-    page_x_ = (page_x_ + 1) % page_x_max_;
-
-    SDL_LogInfo(
-        SDL_LOG_CATEGORY_APPLICATION, "App::on_click called: %d:%d",
-        page_x_, page_x_max_
-    );
-
-    return 0;
-} // App::on_left_click_()
-
-/**
- *  Flip pages vertically. The sprite_sheet might not fit in one
- *  screen.  Mouse's `right-click` is used to flip pages vertically
- *  while `left-click` flip horizontally.
- *
- *  @param std::shared_ptr<Event>: pointer to the 'right-click' event
- *                                 object.
- *  @return int: o: success.
- *  @since  0.1.0
- **/
-int App::on_right_click_(std::shared_ptr<Event> e) {
-    page_y_ = (page_y_ + 1) % page_y_max_;
-
-    SDL_LogInfo(
-        SDL_LOG_CATEGORY_APPLICATION, "App::on_click called: %d:%d",
-        page_y_, page_y_max_
-    );
-
-    return 0;
-} // App::on_right_click_()
-
-/**
- *  Dump sprites (tiles) of the spritesheet to screen in
- *  6 (columns) x 4 (rows) manner.
- *
- *  @param none.
- *  @return none.
- *  @since  0.1.0
- */
-void App::tile_page_() {
-    for (int i = 0; i < 6; i ++) {
-        int col = page_x_ * 6 + i;
-
-        for (int j = 0; j < 4; j ++) {
-            int row = page_y_ * 4 + j;
-
-            tile_quad_(col, row);
-        }
-    }
-} // App::tile_page_();
-
-/**
- *  Output a 64x64 sprite (tile) at spritesheet's `col` x `row` to
- *  the screen.
- *
- *  @param int col the column in spritesheet
- *  @param int row the row in spritesheet
- *  @return none.
- *  @since  0.1.0
- */
-void App::tile_quad_(int col, int row) {
-    std::stringstream ss;
-
-    SDL_Rect rect;
-    SDL_Rect src;
-    SDL_Rect dst;
-    SDL_Texture *xy_hint = nullptr;
-
-    std::string index;
-
-    ss << std::setfill('0') << std::setw(2) << col
-       << "x"
-       << std::setfill('0') << std::setw(2) << row;
-    ss >> index;
-
-    xy_hint = text_->get_text(renderer_, index);
-    SDL_QueryTexture(xy_hint, nullptr, nullptr, &rect.w, &rect.h);
-
-    rect.x = (col - page_x_ * 6) * 128 + (128 - rect.w) / 2 + 16;
-    rect.y = (row - page_y_ * 4) * (rect.h + 64 + 16) + 16;
-
-    SDL_RenderCopy(renderer_, xy_hint, nullptr, &rect);
-
-    src.x = (col * 4) * 16;
-    src.y = (row * 4) * 16;
-    src.w = 64;
-    src.h = 64;
-
-    dst.x = (col - page_x_ * 6) * 128 + 64 / 2 + 16;
-    dst.y = rect.y + rect.h + 8;
-    dst.w = 64;
-    dst.h = 64;
-
-    sprite_world_->tile(renderer_, &src, &dst);
-} // App::tile_quad_()
 
 // app.cpp
